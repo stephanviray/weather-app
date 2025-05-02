@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Weather Globe</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="container">
+        <div id="globe-container"></div>
+        
+        <div id="controls-container">
+            <button id="home-button" title="Reset View"><i class="fas fa-home"></i></button>
+            <button id="zoom-in" title="Zoom In"><i class="fas fa-plus"></i></button>
+            <button id="zoom-out" title="Zoom Out"><i class="fas fa-minus"></i></button>
+            <button id="toggle-day-night" title="Toggle Day/Night"><i class="fas fa-moon"></i></button>
+        </div>
+        
+        <div id="weather-info">
+            <h2>Weather Information</h2>
+            <div id="weather-details">Select a location on the globe</div>
+            <div id="additional-metrics" class="hidden">
+                <h3>Detailed Metrics</h3>
+                <div id="metrics-content"></div>
+            </div>
+            <button id="toggle-metrics" class="icon-button" title="Show More"><i class="fas fa-chevron-down"></i></button>
+        </div>
+        
+        <div id="forecast-container" class="hidden">
+            <h3>5-Day Forecast</h3>
+            <div id="forecast-timeline"></div>
+        </div>
+        
+        <div id="search-container">
+            <input type="text" id="location-search" placeholder="Search for a location...">
+            <button id="search-button"><i class="fas fa-search"></i></button>
+            <div id="bookmarks-dropdown" class="dropdown">
+                <button id="bookmarks-button" title="Bookmarks"><i class="fas fa-bookmark"></i></button>
+                <div id="bookmarks-content" class="dropdown-content">
+                    <div id="saved-locations">
+                        <p>No saved locations</p>
+                    </div>
+                    <div class="dropdown-footer">
+                        <button id="add-current-location">Save Current</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="rotation-control">
+            <div class="rotation-label">
+                <i class="fas fa-sync-alt"></i>
+                <span>Rotation Speed</span>
+            </div>
+            <input type="range" id="rotation-speed" min="0" max="2" step="0.1" value="1">
+        </div>
+
+        <!-- Separate Weather Route Container -->
+        <div id="weather-route-window" class="weather-route-container hidden">
+            <div class="weather-route-header">
+                <h3>Weather Along Your Route</h3>
+                <button id="close-weather-route" class="close-button"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="route-weather-info"></div>
+        </div>
+
+        <!-- AI Chat Interface -->
+        <div id="chat-container">
+            <button id="chat-toggle" class="chat-button" title="Chat with AI">
+                <i class="fas fa-robot"></i>
+            </button>
+            <div id="chat-window" class="hidden">
+                <div class="chat-header">
+                    <h3>Weather AI Assistant</h3>
+                    <button id="close-chat" class="close-button"><i class="fas fa-times"></i></button>
+                </div>
+                <div id="chat-messages"></div>
+                <div class="travel-guide-container">
+                    <div class="location-inputs">
+                        <input type="text" id="start-location" placeholder="Starting Location">
+                        <input type="text" id="end-location" placeholder="Destination">
+                        <button id="get-travel-guide">Get Travel Guide</button>
+                    </div>
+                    <div id="travel-route" class="hidden">
+                        <div id="route-visualization"></div>
+                        <div id="route-weather-info"></div>
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" id="chat-input" placeholder="Ask me anything about weather...">
+                    <button id="send-message"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Three.js dependencies in correct order -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/chat.js"></script>
+</body>
+</html>
