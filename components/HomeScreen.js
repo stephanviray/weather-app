@@ -11,6 +11,7 @@ import {
   Text,
   Alert,
   RefreshControl,
+  ActivityIndicator
 } from 'react-native';
 import WeatherHeader from './WeatherHeader';
 import ActivityCard from './ActivityCard';
@@ -21,93 +22,103 @@ import supabase from '../src/supabase';
 
 const HomeScreen = () => {
   const [weatherData, setWeatherData] = useState(null);
-  const [location, setLocation] = useState(''); // User input location
-  const [mapLocation, setMapLocation] = useState(null); // Map location
-  const [activities, setActivities] = useState([]); // Activities for the card
+  const [location, setLocation] = useState('');
+  const [mapLocation, setMapLocation] = useState(null);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch current location on initial load
+  // Fetch current location and weather on initial load
   useEffect(() => {
-    const getCurrentLocation = async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          console.warn('Permission to access location was denied');
-          return;
-        }
-
-        const loc = await Location.getCurrentPositionAsync({});
-        const reverseGeocode = await Location.reverseGeocodeAsync({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-
-        if (reverseGeocode.length > 0) {
-          const cityName = reverseGeocode[0].city || 'Unknown Location';
-          setLocation(cityName);
-          
-          // Set initial map location
-          const locationDetails = {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            city: cityName
-          };
-          setMapLocation(locationDetails);
-
-          // Fetch initial weather data
-          const weatherResponse = await fetchWeatherData(cityName);
-          setWeatherData(weatherResponse);
-
-          // Set some sample activities
-          setActivities([
-            { id: '1', label: 'Walking', count: '2,456' },
-            { id: '2', label: 'Running', count: '1,234' },
-            { id: '3', label: 'Cycling', count: '789' }
-          ]);
-        }
-      } catch (error) {
-        console.error('Error getting location:', error);
-      }
-    };
-
     getCurrentLocation();
   }, []);
 
-  // Handle location search
-  const handleLocationSearch = async () => {
-    if (!location) return;
-
+  const getCurrentLocation = async () => {
     try {
-      // Geocode the location
+      setError(null);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setError('Location permission is needed for accurate weather data');
+        setLoading(false);
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      });
+      const reverseGeocode = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+
+      if (reverseGeocode.length > 0) {
+        const cityName = reverseGeocode[0].city || 'Unknown Location';
+        setLocation(cityName);
+        
+        const locationDetails = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          city: cityName
+        };
+        setMapLocation(locationDetails);
+
+        // Fetch weather data
+        const weatherResponse = await fetchWeatherData(cityName);
+        setWeatherData(weatherResponse);
+
+        // Set default activities
+        setActivities([
+          { id: '1', label: 'Walking', count: '2,456' },
+          { id: '2', label: 'Running', count: '1,234' },
+          { id: '3', label: 'Cycling', count: '789' }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setError('Unable to fetch location data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLocationSearch = async () => {
+    if (!location) {
+      Alert.alert('Error', 'Please enter a location');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
       const geocode = await Location.geocodeAsync(location);
       
       if (geocode.length > 0) {
-        // Create location object
         const locationDetails = {
           latitude: geocode[0].latitude,
           longitude: geocode[0].longitude,
           city: location
         };
-
-        // Update map location
         setMapLocation(locationDetails);
 
-        // Fetch weather data
         const weatherResponse = await fetchWeatherData(location);
         setWeatherData(weatherResponse);
 
-        // You can modify activities based on location if needed
         setActivities([
           { id: '1', label: 'Local Walking', count: '1,456' },
           { id: '2', label: 'City Exploration', count: '789' },
           { id: '3', label: 'Urban Cycling', count: '345' }
         ]);
       } else {
-        console.warn('Location not found');
+        setError('Location not found. Please try a different search.');
       }
     } catch (error) {
       console.error('Search location error:', error);
+      setError('Error searching location. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -123,17 +134,15 @@ const HomeScreen = () => {
     }
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('saved_locations')
-        .insert([
-          { 
-            user_id: user.id, 
-            name: mapLocation.city,
-            latitude: mapLocation.latitude,
-            longitude: mapLocation.longitude,
-            created_at: new Date(),
-          }
-        ]);
+        .insert([{ 
+          user_id: user.id, 
+          name: mapLocation.city,
+          latitude: mapLocation.latitude,
+          longitude: mapLocation.longitude,
+          created_at: new Date(),
+        }]);
 
       if (error) {
         Alert.alert('Error', 'Could not save location');
@@ -147,45 +156,20 @@ const HomeScreen = () => {
     }
   };
 
-  // Function to handle refresh when pulled down
   const onRefresh = async () => {
     setRefreshing(true);
-    try {
-      // Always get current physical location on refresh
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({});
-        const reverseGeocode = await Location.reverseGeocodeAsync({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-
-        if (reverseGeocode.length > 0) {
-          const cityName = reverseGeocode[0].city || 'Unknown Location';
-          setLocation(cityName);
-          
-          const locationDetails = {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            city: cityName
-          };
-          setMapLocation(locationDetails);
-
-          const weatherResponse = await fetchWeatherData(cityName);
-          setWeatherData(weatherResponse);
-        }
-      } else {
-        Alert.alert(
-          "Location Permission", 
-          "Location permission is required to refresh with current location"
-        );
-      }
-    } catch (error) {
-      console.error('Error refreshing weather data:', error);
-    } finally {
-      setRefreshing(false);
-    }
+    await getCurrentLocation();
+    setRefreshing(false);
   };
+
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFCB39" />
+        <Text style={styles.loadingText}>Loading weather data...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -193,6 +177,7 @@ const HomeScreen = () => {
       <ImageBackground 
         source={require('../assets/background.jpg')} 
         style={styles.background}
+        resizeMode="cover"
       >
         <SafeAreaView style={styles.safeArea}>
           <ScrollView 
@@ -207,12 +192,12 @@ const HomeScreen = () => {
               />
             }
           >
-            {/* Location Search Input */}
-            <View style={styles.locationInputContainer}>
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
               <TextInput
-                style={styles.input}
+                style={styles.searchInput}
                 placeholder="Enter location"
-                placeholderTextColor="white"
+                placeholderTextColor="rgba(255, 255, 255, 0.7)"
                 value={location}
                 onChangeText={setLocation}
               />
@@ -224,7 +209,18 @@ const HomeScreen = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Weather Header */}
+            {error && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity 
+                  style={styles.retryButton}
+                  onPress={getCurrentLocation}
+                >
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <WeatherHeader
               weatherData={
                 weatherData || {
@@ -238,14 +234,12 @@ const HomeScreen = () => {
               }
             />
 
-            {/* Activity Card with Location */}
             <ActivityCard 
               activities={activities} 
               location={mapLocation} 
             />
 
-            {/* Save location button (only visible when logged in) */}
-            {user && (
+            {user && mapLocation && (
               <TouchableOpacity 
                 style={styles.saveLocationButton}
                 onPress={saveCurrentLocation}
@@ -263,53 +257,95 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0a1929',
   },
   background: {
     flex: 1,
-    resizeMode: 'cover',
   },
   safeArea: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0a1929',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#4fc3f7',
+  },
   scrollContainer: {
     padding: 16,
   },
-  locationInputContainer: {
+  searchContainer: {
     flexDirection: 'row',
-    marginBottom: 10,
+    backgroundColor: 'rgba(13, 31, 45, 0.95)',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.2)',
   },
-  input: {
+  searchInput: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     color: 'white',
-    padding: 10,
-    borderRadius: 5,
-    marginRight: 10,
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   searchButton: {
     backgroundColor: '#FFCB39',
-    padding: 10,
-    borderRadius: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   searchButtonText: {
-    color: 'black',
+    color: '#2a3a5d',
     fontWeight: 'bold',
+    fontSize: 14,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#ff5252',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  retryButton: {
+    backgroundColor: '#FFCB39',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: '#2a3a5d',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   saveLocationButton: {
-    backgroundColor: '#FFCB39',
-    padding: 15,
-    borderRadius: 5,
-    justifyContent: 'center',
+    backgroundColor: 'rgba(79, 195, 247, 0.2)',
+    padding: 16,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.4)',
   },
   saveLocationButtonText: {
-    color: 'black',
-    fontWeight: 'bold',
+    color: '#4fc3f7',
+    fontWeight: '600',
     fontSize: 16,
   },
 });
 
-export default HomeScreen; 
+export default HomeScreen;

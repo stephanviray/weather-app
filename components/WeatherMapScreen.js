@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Alert } from 'react-native';
+import { StyleSheet, View, Text, Alert, TouchableOpacity } from 'react-native';
 import WebView from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useAuth } from '../src/context/AuthContext';
@@ -10,38 +10,50 @@ const WeatherMapScreen = () => {
     longitude: 122.462,
     zoom: 6,
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const { user } = useAuth();
 
-  useEffect(() => {
-    (async () => {
+  const getCurrentLocation = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        // Continue with default region if permission denied
+        setError('Location permission is required for better experience');
         return;
       }
 
-      try {
-        let location = await Location.getCurrentPositionAsync({});
-        setRegion({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          zoom: 8,
-        });
-      } catch (error) {
-        console.log('Error getting location', error);
-        // Use default region if location cannot be determined
-      }
-    })();
+      let location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      
+      setRegion({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        zoom: 8,
+      });
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setError('Could not get your location. Using default view.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Try to get location on initial load
+  useEffect(() => {
+    getCurrentLocation();
   }, []);
 
-  // Construct the URL with the current region
+  // Construct zoom.earth URL with current region
   const zoomEarthUrl = `https://zoom.earth/maps/satellite/#view=${region.latitude},${region.longitude},${region.zoom}z/overlays=wind`;
 
-  // Enhanced script to hide ALL download app prompts
+  // Enhanced script to hide app prompts and improve UI
   const HIDE_ELEMENTS_SCRIPT = `
     (function() {
       function hideAppDownloadElements() {
-        // List of selectors that might contain app download prompts
         const selectors = [
           '.app-banner', '.download-app', '.app-download', 
           '[class*="download"]', '[id*="download"]',
@@ -51,72 +63,56 @@ const WeatherMapScreen = () => {
           '.app-promotion', '#app-promotion',
           '.get-app', '#get-app',
           '.cookie-banner', '.privacy-banner',
-          '.promotion', '.popup',
-          // Navigation and UI elements we want to keep
-          'header', 'footer', '.menu', '.toolbar', '.navigation'
+          '.promotion', '.popup'
         ];
         
-        // Target elements with these text content
         const textMatches = ['download', 'app', 'mobile app', 'get the app', 'install'];
         
-        // Hide by selectors
+        // Hide elements by selectors
         selectors.forEach(selector => {
           try {
             const elements = document.querySelectorAll(selector);
             elements.forEach(el => {
-              // Don't hide navigation elements
               if (!el.classList.contains('navigation') && 
                   !el.classList.contains('menu') && 
                   !el.classList.contains('toolbar')) {
                 el.style.display = 'none';
               }
             });
-          } catch (e) {
-            // Ignore errors for non-existent selectors
-          }
+          } catch (e) { /* Ignore errors for non-existent selectors */ }
         });
         
-        // Hide any fixed or absolute positioned elements that might be popups
-        const positionedElements = document.querySelectorAll('div[style*="position: fixed"], div[style*="position:fixed"], div[style*="position: absolute"], div[style*="position:absolute"]');
+        // Hide fixed/absolute positioned elements
+        const positionedElements = document.querySelectorAll(
+          'div[style*="position: fixed"], div[style*="position:fixed"], div[style*="position: absolute"], div[style*="position:absolute"]'
+        );
         positionedElements.forEach(el => {
-          // Check if it contains app-related text
           const text = el.innerText.toLowerCase();
           if (textMatches.some(match => text.includes(match))) {
             el.style.display = 'none';
           }
         });
-        
-        // Remove download buttons
-        document.querySelectorAll('a, button').forEach(el => {
-          const text = el.innerText.toLowerCase();
-          if (textMatches.some(match => text.includes(match))) {
-            el.style.display = 'none';
-          }
-        });
-        
-        // Remove cookie consent notices which often appear at bottom
-        const possibleCookieNotices = document.querySelectorAll('div[class*="cookie"], div[id*="cookie"], div[class*="consent"], div[id*="consent"]');
-        possibleCookieNotices.forEach(el => {
+
+        // Remove cookie notices
+        const cookieElements = document.querySelectorAll(
+          'div[class*="cookie"], div[id*="cookie"], div[class*="consent"], div[id*="consent"]'
+        );
+        cookieElements.forEach(el => {
           el.style.display = 'none';
         });
       }
       
-      // Run immediately
+      // Run script at different stages
       hideAppDownloadElements();
       
-      // Run when DOM is fully loaded
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', hideAppDownloadElements);
       }
       
-      // Also run after everything is loaded, including images
       window.addEventListener('load', hideAppDownloadElements);
       
-      // And periodically to catch dynamically added elements
-      const intervalId = setInterval(hideAppDownloadElements, 800);
-      
-      // Clear interval after 20 seconds to save resources
-      setTimeout(() => clearInterval(intervalId), 20000);
+      const cleanupInterval = setInterval(hideAppDownloadElements, 800);
+      setTimeout(() => clearInterval(cleanupInterval), 20000);
     })();
   `;
 
@@ -135,6 +131,14 @@ const WeatherMapScreen = () => {
           </View>
         )}
       />
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={getCurrentLocation}>
+            <Text style={styles.retryButtonText}>Retry Location</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -161,6 +165,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  errorContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(13, 31, 45, 0.95)',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#ff5252',
+    fontSize: 14,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#FFCB39',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: '#2a3a5d',
+    fontWeight: 'bold',
+  }
 });
 
-export default WeatherMapScreen; 
+export default WeatherMapScreen;

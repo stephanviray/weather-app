@@ -5,24 +5,22 @@ import {
   Text, 
   ActivityIndicator, 
   FlatList,
-  Image,
   Animated,
   Easing,
-  Alert,
-  NetInfo
+  Alert
 } from 'react-native';
 import * as Location from 'expo-location';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_KEY = 'ebdd281e718392cab0ed58d3111c8612';
-const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/onecall';
+const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/forecast';
 const CACHE_EXPIRY_TIME = 1000 * 60 * 30; // 30 minutes cache
 
 // Create axios instance with default config
 const forecastApi = axios.create({
   baseURL: WEATHER_API_URL,
-  timeout: 10000,
+  timeout: 15000, // Increased timeout
   headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
@@ -185,125 +183,62 @@ const ForecastScreen = () => {
 
   const fetchForecastData = async (latitude, longitude) => {
     try {
-      // Try to make the real API call first
       const params = {
         lat: latitude,
         lon: longitude,
-        exclude: 'minutely,hourly',
         units: 'metric',
         appid: API_KEY
       };
 
-      let retries = 3;
-      let lastError = null;
-
-      while (retries > 0) {
-        try {
-          const response = await forecastApi.get('', { params });
-          
-          // Cache the successful response
-          const cacheData = {
-            timestamp: Date.now(),
-            data: response.data.daily,
-            coords: { latitude, longitude }
-          };
-          await AsyncStorage.setItem('forecastData', JSON.stringify(cacheData));
-          
-          setForecast(response.data.daily);
-          setLoading(false);
-          return;
-        } catch (error) {
-          lastError = error;
-          retries--;
-          if (retries > 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            continue;
-          }
-        }
-      }
-
-      // If all retries failed, throw the last error
-      throw lastError;
-
-    } catch (error) {
-      console.error('Error fetching forecast:', error);
+      const response = await forecastApi.get('', { params });
       
-      // Check if we have cached data to use as fallback
+      if (response.data && response.data.list) {
+        // Process the 5-day forecast data
+        const processedForecast = response.data.list.filter((item, index) => {
+          // Get one forecast per day (every 8th item as data is in 3-hour intervals)
+          return index % 8 === 0;
+        }).map(item => ({
+          dt: item.dt,
+          temp: {
+            day: item.main.temp,
+            min: item.main.temp_min,
+            max: item.main.temp_max
+          },
+          weather: item.weather,
+          humidity: item.main.humidity,
+          wind_speed: item.wind.speed
+        }));
+
+        // Cache the successful response
+        const cacheData = {
+          timestamp: Date.now(),
+          data: processedForecast,
+          coords: { latitude, longitude }
+        };
+        await AsyncStorage.setItem('forecastData', JSON.stringify(cacheData));
+        
+        setForecast(processedForecast);
+        setError(null);
+      }
+    } catch (error) {
+      console.error('Forecast fetch error:', error);
+      const errorMessage = error.response?.data?.message || 'Error fetching the latest weather data';
+      setError(errorMessage);
+      
+      // Try to load cached data
       try {
         const cachedData = await AsyncStorage.getItem('forecastData');
         if (cachedData) {
           const { data } = JSON.parse(cachedData);
           setForecast(data);
           Alert.alert(
-            'Network Issue',
-            'Using cached weather data. Please check your internet connection.',
-            [{ text: 'OK' }]
-          );
-        } else {
-          // Use mock data as last resort
-          const mockResponse = {
-            daily: [
-              {
-                dt: Math.floor(Date.now() / 1000),
-                temp: { day: 25, min: 20, max: 28 },
-                weather: [{ main: 'Clear', icon: '01d' }],
-                humidity: 65,
-                wind_speed: 5.2,
-              },
-              {
-                dt: Math.floor(Date.now() / 1000) + 86400,
-                temp: { day: 24, min: 19, max: 26 },
-                weather: [{ main: 'Clouds', icon: '03d' }],
-                humidity: 70,
-                wind_speed: 4.8,
-              },
-              {
-                dt: Math.floor(Date.now() / 1000) + 86400 * 2,
-                temp: { day: 23, min: 18, max: 25 },
-                weather: [{ main: 'Rain', icon: '10d' }],
-                humidity: 75,
-                wind_speed: 6.1,
-              },
-              {
-                dt: Math.floor(Date.now() / 1000) + 86400 * 3,
-                temp: { day: 21, min: 17, max: 23 },
-                weather: [{ main: 'Rain', icon: '10d' }],
-                humidity: 80,
-                wind_speed: 7.2,
-              },
-              {
-                dt: Math.floor(Date.now() / 1000) + 86400 * 4,
-                temp: { day: 22, min: 18, max: 24 },
-                weather: [{ main: 'Clouds', icon: '04d' }],
-                humidity: 75,
-                wind_speed: 5.5,
-              },
-              {
-                dt: Math.floor(Date.now() / 1000) + 86400 * 5,
-                temp: { day: 24, min: 19, max: 26 },
-                weather: [{ main: 'Clear', icon: '01d' }],
-                humidity: 65,
-                wind_speed: 4.2,
-              },
-              {
-                dt: Math.floor(Date.now() / 1000) + 86400 * 6,
-                temp: { day: 26, min: 20, max: 28 },
-                weather: [{ main: 'Clear', icon: '01d' }],
-                humidity: 60,
-                wind_speed: 3.8,
-              }
-            ]
-          };
-          setForecast(mockResponse.daily);
-          Alert.alert(
-            'Network Issue',
-            'Unable to fetch latest weather data. Showing sample data.',
+            'Using Cached Data',
+            'Unable to fetch latest weather data. Showing last known forecast.',
             [{ text: 'OK' }]
           );
         }
       } catch (cacheError) {
         console.error('Cache error:', cacheError);
-        setError('Unable to load weather data');
       }
     } finally {
       setLoading(false);
@@ -493,10 +428,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
     padding: 20,
+    textShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
   },
   listContainer: {
     paddingHorizontal: 15,
@@ -504,25 +440,65 @@ const styles = StyleSheet.create({
   },
   forecastItem: {
     backgroundColor: 'rgba(13, 31, 45, 0.95)',
-    borderRadius: 10,
-    padding: 15,
+    padding: 20,
     marginBottom: 15,
+    borderRadius: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    borderRadius: 25,
-    backgroundColor: 'rgba(79, 195, 247, 0.2)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.2)',
+  },
+  dayText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4fc3f7',
+    marginBottom: 10,
+  },
+  weatherIconContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  weatherIconPlaceholder: {
+    fontSize: 36,
+  },
+  tempText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginVertical: 8,
+  },
+  conditionText: {
+    fontSize: 18,
+    color: '#4fc3f7',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  detailsContainer: {
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+  },
+  detailText: {
+    fontSize: 16,
+    color: '#ffffff',
+    marginVertical: 4,
   },
   impactTimeContainer: {
-    marginTop: 10,
-    padding: 8,
-    backgroundColor: 'rgba(79, 195, 247, 0.1)',
-    borderRadius: 6,
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: 'rgba(79, 195, 247, 0.15)',
+    borderRadius: 10,
   },
   impactTimeTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#4fc3f7',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   impactTimeRow: {
     flexDirection: 'row',
@@ -534,15 +510,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   impactTimeLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#4fc3f7',
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   impactTimeText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#ffffff',
   },
+  skeletonLine: {
+    height: 20,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+    borderRadius: 4,
+    marginVertical: 4,
+  },
+  skeletonCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+    marginVertical: 10,
+  }
 });
 
-export default ForecastScreen; 
+export default ForecastScreen;

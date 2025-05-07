@@ -4,11 +4,11 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 const WeatherHeader = ({ weatherData }) => {
   return (
     <View style={styles.container}>
-      <View>
+      <View style={styles.mainContent}>
         <View style={styles.tempContainer}>
-          <Text style={styles.temperature}>{weatherData.temperature}°</Text>
-          <Text style={styles.location}>C, {weatherData.location}</Text>
+          <Text style={styles.temperature}>{weatherData.temperature}°C</Text>
         </View>
+        <Text style={styles.location}>{weatherData.location}</Text>
         
         <View style={styles.detailsContainer}>
           <View style={styles.detailRow}>
@@ -29,65 +29,60 @@ const WeatherHeader = ({ weatherData }) => {
           </View>
         </View>
       </View>
-      
-      <View style={styles.avatar}>
-        <Image
-          source={{ uri: 'https://placekitten.com/100/100' }} // Placeholder image
-          style={styles.avatarImage}
-        />
-      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginTop: 48,
+    backgroundColor: 'rgba(13, 31, 45, 0.95)',
+    borderRadius: 15,
+    padding: 20,
+    marginVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  mainContent: {
+    flex: 1,
   },
   tempContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    marginBottom: 8,
   },
   temperature: {
     fontSize: 48,
     fontWeight: '600',
-    color: 'white',
+    color: '#ffffff',
+    textShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
   },
   location: {
     fontSize: 16,
-    color: 'white',
-    marginLeft: 8,
-    marginBottom: 8,
+    color: '#4fc3f7',
+    marginBottom: 16,
+    flexWrap: 'wrap'
   },
   detailsContainer: {
-    marginTop: 8,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+    borderRadius: 10,
+    padding: 12,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 2,
+    marginVertical: 4,
   },
   icon: {
-    marginRight: 8,
-    fontSize: 16,
+    marginRight: 12,
+    fontSize: 18,
   },
   detailText: {
-    color: 'white',
-    fontSize: 14,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '500',
+    flex: 1,
+  }
 });
 
 export default WeatherHeader;

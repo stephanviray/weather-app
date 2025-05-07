@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Animated,
   SafeAreaView,
   StatusBar,
 } from 'react-native';
@@ -13,7 +14,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import * as Location from 'expo-location';
 
-// Configure calendar locale (optional)
+// Configure calendar locale
 LocaleConfig.locales['en'] = {
   monthNames: [
     'January', 'February', 'March', 'April', 'May', 'June', 
@@ -31,174 +32,241 @@ LocaleConfig.defaultLocale = 'en';
 const ActivityCard = ({ activities = [], location }) => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [mapRegion, setMapRegion] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Animation value for fade-in effect
+  const fadeAnim = useState(new Animated.Value(0))[0];
+
+  // Start fade-in animation when component mounts
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   // Update map region when location prop changes
   useEffect(() => {
+    setLoading(true);
+    setError(null);
+    
     if (location) {
       setMapRegion({
         latitude: location.latitude,
         longitude: location.longitude,
-        latitudeDelta: 0.0922,  // Zoom level
-        longitudeDelta: 0.0421, // Zoom level
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
       });
+      setLoading(false);
+    } else {
+      setError('Location data unavailable');
+      setLoading(false);
     }
   }, [location]);
 
-  // Handle date selection in the calendar
+  // Marked dates for calendar
+  const markedDates = {
+    [selectedDate]: { selected: true, selectedColor: '#FFCB39' },
+    // Add dynamic marked dates based on activities if needed
+  };
+
   const handleDayPress = (day) => {
     setSelectedDate(day.dateString);
   };
 
-  // Marked dates (example: mark today and some events)
-  const markedDates = {
-    [selectedDate]: { selected: true, selectedColor: '#FFCB39' }, // Highlight selected date
-    '2023-10-15': { marked: true, dotColor: 'red' }, // Example event
-    '2023-10-20': { marked: true, dotColor: 'blue' }, // Example event
-  };
-
-  // If no location is provided, show loading or error
-  if (!location) {
+  if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#fff" />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFCB39" />
+        <Text style={styles.loadingText}>Loading activities...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error}</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <StatusBar barStyle="light-content" />
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Embedded Google Map */}
-        <View style={styles.mapContainer}>
-          <Text style={styles.mapHeader}>Map</Text>
-          {mapRegion && (
-            <MapView
-              provider={PROVIDER_GOOGLE}
-              style={styles.map}
-              region={mapRegion}
-              loadingEnabled={true}
-              loadingIndicatorColor="#FFCB39"
-            >
-              <Marker
-                coordinate={{
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                }}
-                title={location.city || "Current Location"}
-                description="Your selected location"
-              />
-            </MapView>
-          )}
+        {/* Map Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Location Map</Text>
+          <View style={styles.mapWrapper}>
+            {mapRegion && (
+              <MapView
+                provider={PROVIDER_GOOGLE}
+                style={styles.map}
+                region={mapRegion}
+                loadingEnabled={true}
+                loadingIndicatorColor="#FFCB39"
+              >
+                <Marker
+                  coordinate={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  }}
+                  title={location.city || "Current Location"}
+                  description="Your selected location"
+                />
+              </MapView>
+            )}
+          </View>
         </View>
 
-        {/* Real-Time Calendar */}
-        <View style={styles.calendarContainer}>
+        {/* Calendar Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Activity Calendar</Text>
           <Calendar
             current={selectedDate}
             onDayPress={handleDayPress}
             markedDates={markedDates}
             theme={{
-              backgroundColor: 'rgba(50, 50, 50, 0.8)',
-              calendarBackground: 'rgba(50, 50, 50, 0.8)',
-              textSectionTitleColor: '#fff',
+              backgroundColor: 'transparent',
+              calendarBackground: 'rgba(13, 31, 45, 0.95)',
+              textSectionTitleColor: '#4fc3f7',
               selectedDayBackgroundColor: '#FFCB39',
-              selectedDayTextColor: '#000',
+              selectedDayTextColor: '#2a3a5d',
               todayTextColor: '#FFCB39',
-              dayTextColor: '#fff',
-              monthTextColor: '#fff',
-              arrowColor: '#FFCB39',
+              dayTextColor: '#ffffff',
+              textDisabledColor: 'rgba(255, 255, 255, 0.3)',
+              dotColor: '#4fc3f7',
+              selectedDotColor: '#2a3a5d',
+              monthTextColor: '#4fc3f7',
+              textMonthFontWeight: 'bold',
+              textDayFontSize: 14,
+              textMonthFontSize: 16,
+              textDayHeaderFontSize: 14
             }}
           />
         </View>
 
         {/* Activities List */}
-        <ScrollView 
-          style={styles.scrollView} 
-          contentContainerStyle={styles.scrollContent} 
-          showsVerticalScrollIndicator={false}
-        >
-          {activities.map((activity) => (
-            <View key={activity.id} style={styles.activityCard}>
-              <View>
-                <Text style={styles.activityCount}>{activity.count}</Text>
-                <Text style={styles.activityLabel}>{activity.label}</Text>
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Recent Activities</Text>
+          <ScrollView 
+            style={styles.activitiesContainer}
+            contentContainerStyle={styles.activitiesContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {activities.map((activity) => (
+              <View key={activity.id} style={styles.activityCard}>
+                <View>
+                  <Text style={styles.activityCount}>{activity.count}</Text>
+                  <Text style={styles.activityLabel}>{activity.label}</Text>
+                </View>
+                <TouchableOpacity style={styles.actionButton}>
+                  <Text style={styles.actionButtonText}>↻</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.actionButton}>
-                <Text style={styles.actionButtonText}>↻</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
+            ))}
+          </ScrollView>
+        </View>
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 32,
     flex: 1,
+    marginTop: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(13, 31, 45, 0.95)',
+    borderRadius: 15,
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#4fc3f7',
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#ff5252',
+    fontSize: 14,
+    textAlign: 'center',
   },
   scrollContainer: {
+    paddingBottom: 16,
+  },
+  sectionContainer: {
+    backgroundColor: 'rgba(13, 31, 45, 0.95)',
+    borderRadius: 15,
     padding: 16,
-  },
-  calendarContainer: {
     marginBottom: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.2)',
   },
-  mapContainer: {
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: 'rgba(50, 50, 50, 0.8)',
-    borderRadius: 12,
-  },
-  mapHeader: {
+  sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 8,
+    fontWeight: '600',
+    color: '#4fc3f7',
+    marginBottom: 12,
+  },
+  mapWrapper: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    height: 200,
   },
   map: {
     width: '100%',
-    height: 200,
-    borderRadius: 8,
+    height: '100%',
   },
-  scrollView: {
-    maxHeight: 200,
+  activitiesContainer: {
+    maxHeight: 300,
   },
-  scrollContent: {
-    paddingBottom: 16,
+  activitiesContent: {
+    paddingVertical: 8,
   },
   activityCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(50, 50, 50, 0.7)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+    borderRadius: 10,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   activityCount: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#ffffff',
+    marginBottom: 4,
   },
   activityLabel: {
-    fontSize: 12,
-    color: '#ccc',
+    fontSize: 14,
+    color: '#4fc3f7',
   },
   actionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#FFCB39',
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionButtonText: {
-    color: 'black',
+    color: '#2a3a5d',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 
